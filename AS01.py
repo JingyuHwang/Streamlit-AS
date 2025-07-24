@@ -59,7 +59,13 @@ def load_data(sheet_name):
     """구글 시트에서 원본 데이터를 불러옵니다."""
     try:
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=scopes)
+        
+        # st.secrets에서 서비스 계정 정보를 직접 가져옵니다.
+        creds = Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"],  # "gcp_service_account"는 secrets.toml 파일의 key와 일치해야 합니다.
+            scopes=scopes
+        )
+        
         client = gspread.authorize(creds)
         worksheet = client.open(sheet_name).sheet1
         records = worksheet.get_all_records()
@@ -70,14 +76,9 @@ def load_data(sheet_name):
 
         # '타임스탬프' 열을 날짜 객체로 변환하여 '날짜' 열 추가
         if '타임스탬프' in raw_df.columns:
-            # 1. '오전'/'오후'를 영어 'AM'/'PM'으로 변환합니다.
             timestamps_english = raw_df['타임스탬프'].str.replace('오전', 'AM', regex=False)
             timestamps_english = timestamps_english.str.replace('오후', 'PM', regex=False)
-
-            # 2. 'YYYY. M. D AM/PM H:M:S' 형식임을 코드에 명확히 알려줍니다.
             date_format = '%Y. %m. %d %p %I:%M:%S'
-
-            # 3. 지정된 형식(format)에 따라 날짜로 변환하여 오류를 해결합니다.
             raw_df['날짜'] = pd.to_datetime(timestamps_english, format=date_format, errors='coerce').dt.date
 
         # '성함' 열의 양쪽 공백을 제거하여 데이터 정제
@@ -94,7 +95,7 @@ def load_data(sheet_name):
 def login_page():
     """로그인 UI를 표시합니다."""
     st.subheader("로그인")
-    username = st.text_input("이름").strip() # '이름' -> '성함'
+    username = st.text_input("이름").strip()
     password = st.text_input("비밀번호", type="password")
     if st.button("로그인"):
         user_info = st.session_state.users.get(username)
@@ -131,15 +132,15 @@ def create_user_admin():
     """관리자용 신규 수강생 계정 생성 UI 및 로직"""
     with st.expander("신규 수강생 계정 생성"):
         with st.form("create_user_form", clear_on_submit=True):
-            new_username = st.text_input("새 수강생 이름") # '이름' -> '성함'
+            new_username = st.text_input("새 수강생 이름")
             new_password = st.text_input("초기 비밀번호", type="password")
             submitted = st.form_submit_button("계정 생성")
 
             if submitted:
                 if not new_username:
-                    st.error("이름을 입력해주세요.") # '이름' -> '성함'
+                    st.error("이름을 입력해주세요.")
                 elif new_username in st.session_state.users:
-                    st.error(f"이미 존재하는 이름입니다: {new_username}") # '이름' -> '성함'
+                    st.error(f"이미 존재하는 이름입니다: {new_username}")
                 elif len(new_password) < 4:
                     st.error("비밀번호는 4자 이상이어야 합니다.")
                 else:
@@ -148,27 +149,27 @@ def create_user_admin():
 
 def rename_user_admin():
     """관리자용 수강생 이름 변경 UI 및 로직"""
-    with st.expander("수강생 이름 변경"): # '이름' -> '성함'
+    with st.expander("수강생 이름 변경"):
         student_list = [name for name, info in st.session_state.users.items() if info["role"] == "student"]
         if not student_list:
-            st.info("이름을 변경할 수강생이 없습니다.") # '이름' -> '성함'
+            st.info("이름을 변경할 수강생이 없습니다.")
             return
 
-        selected_student = st.selectbox("이름을 변경할 수강생 선택", student_list, key="rename_select") # '이름' -> '성함'
+        selected_student = st.selectbox("이름을 변경할 수강생 선택", student_list, key="rename_select")
 
         with st.form("rename_user_form"):
-            new_name = st.text_input("새 이름", value=selected_student) # '이름' -> '성함'
-            submitted = st.form_submit_button("이름 변경하기") # '이름' -> '성함'
+            new_name = st.text_input("새 이름", value=selected_student)
+            submitted = st.form_submit_button("이름 변경하기")
 
             if submitted:
                 if not new_name:
-                    st.error("새 이름을 입력해주세요.") # '이름' -> '성함'
+                    st.error("새 이름을 입력해주세요.")
                 elif new_name in st.session_state.users:
-                    st.error(f"이미 존재하는 이름입니다: {new_name}") # '이름' -> '성함'
+                    st.error(f"이미 존재하는 이름입니다: {new_name}")
                 else:
                     user_data = st.session_state.users.pop(selected_student)
                     st.session_state.users[new_name] = user_data
-                    st.success(f"'{selected_student}'님의 이름이 '{new_name}'(으)로 변경되었습니다.") # '이름' -> '성함'
+                    st.success(f"'{selected_student}'님의 이름이 '{new_name}'(으)로 변경되었습니다.")
                     st.warning("계정 이름 변경은 현재 세션에만 적용됩니다. 출결 데이터의 '이름'은 변경되지 않습니다.")
                     st.rerun()
 
@@ -207,13 +208,19 @@ def edit_title_admin():
 def show_student_page(raw_df, username, selected_date):
     """학생 페이지를 표시합니다."""
     st.subheader(f"🙋 {username}님, 안녕하세요!")
+
+    # --- 데이터 새로고침 버튼 ---
+    if st.button("🔄 데이터 새로고침"):
+        st.cache_data.clear()
+        st.rerun()
+
     st.divider()
 
     # --- 선택된 날짜의 출결 기록 ---
     st.subheader(f"📅 {selected_date} 출결 기록")
 
     # 이름과 날짜로 데이터 필터링
-    student_dated_data = raw_df[(raw_df['성함'] == username) & (raw_df['날짜'] == selected_date)] # '이름' -> '성함'
+    student_dated_data = raw_df[(raw_df['성함'] == username) & (raw_df['날짜'] == selected_date)]
 
     if student_dated_data.empty:
         st.info("해당 날짜의 출결 기록이 없습니다.")
@@ -224,7 +231,7 @@ def show_student_page(raw_df, username, selected_date):
 
     # --- 부가 기능 ---
     with st.expander("나의 전체 출결 기록 보기"):
-        student_all_data = raw_df[raw_df['성함'] == username] # '이름' -> '성함'
+        student_all_data = raw_df[raw_df['성함'] == username]
         if student_all_data.empty:
             st.info("기록된 출결 데이터가 없습니다.")
         else:
@@ -236,6 +243,12 @@ def show_student_page(raw_df, username, selected_date):
 def show_admin_page(raw_df, selected_date):
     """관리자 페이지를 표시합니다."""
     st.subheader("👨‍💼 관리자 모드")
+
+    # --- 데이터 새로고침 버튼 ---
+    if st.button("🔄 데이터 새로고침"):
+        st.cache_data.clear()
+        st.rerun()
+
     st.divider()
 
     # --- 선택된 날짜의 출결 현황 ---
@@ -257,7 +270,7 @@ def show_admin_page(raw_df, selected_date):
         selected_student = st.selectbox("조회할 수강생 선택", student_list)
         
         if selected_student:
-            student_raw_data = raw_df[raw_df['성함'] == selected_student] # '이름' -> '성함'
+            student_raw_data = raw_df[raw_df['성함'] == selected_student]
             
             if student_raw_data.empty:
                 st.warning(f"'{selected_student}'님의 출결 기록이 없습니다.")
@@ -311,15 +324,21 @@ def main():
         # --- 메인 페이지 ---
         raw_df = load_data(SPREADSHEET_NAME)
 
-        if '성함' not in raw_df.columns: # '이름' -> '성함'
-                 st.error("출석부 데이터를 불러오지 못했거나 '성함' 열이 없습니다.") # '이름' -> '성함'
-                 return
-
-        # 역할에 따라 페이지 표시
-        if st.session_state.role == "admin":
-            show_admin_page(raw_df, selected_date)
+        # '성함' 열 존재 여부 확인 후 로직 수행
+        if raw_df is not None and '성함' in raw_df.columns:
+            # 역할에 따라 페이지 표시
+            if st.session_state.role == "admin":
+                show_admin_page(raw_df, selected_date)
+            else:
+                show_student_page(raw_df, st.session_state.username, selected_date)
         else:
-            show_student_page(raw_df, st.session_state.username, selected_date)
+            # 데이터 로드 실패 또는 '성함' 열이 없는 경우 에러 메시지 표시
+            st.error("출석부 데이터를 불러오지 못했거나 '성함' 열이 없습니다.")
+            # 데이터 로드 실패 시에도 새로고침 버튼을 표시하여 재시도 유도
+            if st.button("🔄 데이터 다시 불러오기"):
+                st.cache_data.clear()
+                st.rerun()
+
 
 if __name__ == "__main__":
     main()
