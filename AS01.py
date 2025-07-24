@@ -67,7 +67,8 @@ def load_data(sheet_name):
         )
         
         client = gspread.authorize(creds)
-        worksheet = client.open(sheet_name).sheet2
+        spreadsheet = client.open(sheet_name)
+        worksheet = spreadsheet.worksheet("출석")
         records = worksheet.get_all_records()
         raw_df = pd.DataFrame(records)
 
