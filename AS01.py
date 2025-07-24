@@ -3,6 +3,7 @@ import gspread
 import streamlit as st
 from google.oauth2.service_account import Credentials
 import datetime
+import pytz # 👈 [1] pytz 라이브러리 추가
 
 # --- 앱 설정 (상수) ---
 SERVICE_ACCOUNT_FILE = 'gspread-project-01.json'
@@ -311,7 +312,13 @@ def main():
 
             # 날짜 선택 기능
             st.divider()
-            selected_date = st.date_input("조회할 날짜 선택", datetime.date.today())
+            
+            # 👈 [2] 대한민국 시간(KST) 기준으로 현재 날짜 가져오기
+            kst_today = datetime.datetime.now(pytz.timezone('Asia/Seoul')).date()
+
+            # 👈 [3] st.date_input의 기본값으로 KST 날짜 사용
+            selected_date = st.date_input("조회할 날짜 선택", kst_today)
+            
             st.divider()
 
             if st.button("로그아웃"):
